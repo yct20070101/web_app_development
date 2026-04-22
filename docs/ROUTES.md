@@ -1,70 +1,65 @@
-# 路由設計文件 (API Design)
+# 路由設計 (API & Route Design) - 個人記帳簿系統
 
-## 1. 路由總覽列表
+## 1. 路由總覽表格
+
 | 功能 | HTTP 方法 | URL 路徑 | 對應模板 | 說明 |
 | --- | --- | --- | --- | --- |
-| 食譜列表 (首頁) | `GET` | `/` | `templates/recipes/index.html` | 顯示所有食譜，支援 `?q=` 查詢參數進行名稱/食材搜尋。 |
-| 新增食譜頁面 | `GET` | `/recipes/new` | `templates/recipes/form.html` | 顯示空白的新增食譜表單。 |
-| 建立食譜 | `POST` | `/recipes` | — | 接收表單資料、存入 DB，成功後重導回首頁。 |
-| 食譜明細 | `GET` | `/recipes/<int:id>` | `templates/recipes/show.html` | 顯示特定食譜的食材與步驟。若查無資料回傳 404。 |
-| 編輯食譜頁面 | `GET` | `/recipes/<int:id>/edit` | `templates/recipes/form.html` | 顯示現有食譜資料供修改。 |
-| 更新食譜 | `POST` | `/recipes/<int:id>/update` | — | 接收更新表單並寫回 DB，完成後重導至食譜明細。 |
-| 刪除食譜 | `POST` | `/recipes/<int:id>/delete` | — | 從 DB 中刪除該筆資料，完成後重導回首頁。 |
+| **首頁與設定 (Main)** | | | | |
+| 月度收支總覽 | GET | `/` | `main/index.html` | 顯示當月總收支、結餘與近期紀錄 |
+| 設定頁面 | GET | `/settings` | `main/settings.html` | 顯示預算與類別設定表單 |
+| 更新預算 | POST | `/settings/budget` | — | 接收表單並更新預算，重導向至設定頁 |
+| **記帳紀錄 (Records)** | | | | |
+| 紀錄列表 | GET | `/records` | `records/index.html` | 顯示所有紀錄，支援搜尋與篩選 |
+| 新增紀錄頁面 | GET | `/records/new` | `records/form.html` | 顯示新增表單 |
+| 建立紀錄 | POST | `/records` | — | 接收表單並存入 DB，成功後重導向 |
+| 編輯紀錄頁面 | GET | `/records/<id>/edit`| `records/form.html` | 顯示特定紀錄的編輯表單 |
+| 更新紀錄 | POST | `/records/<id>/update`| — | 接收表單更新 DB，成功後重導向 |
+| 刪除紀錄 | POST | `/records/<id>/delete`| — | 從 DB 刪除特定紀錄，重導向至列表 |
+| **統計分析 (Analytics)**| | | | |
+| 類別分類統計 | GET | `/analytics` | `analytics/index.html` | 顯示支出/收入比例統計圖表 |
 
----
+## 2. 每個路由的詳細說明
 
-## 2. 路由詳細說明
+### `GET /` (月度收支總覽)
+- **輸入**: (無)
+- **處理邏輯**: 呼叫 `Record.get_monthly_summary()` 取得當月統計，呼叫 `Setting.get_value('monthly_budget')` 取得預算。
+- **輸出**: 渲染 `main/index.html`。
 
-### `GET /` (食譜列表)
-- **輸入**: URL 查詢參數 `?q=keyword` (可選)
-- **處理邏輯**: 
-  - 若有 `q` 則呼叫 `Recipe.get_all(q)` 並搜尋。
-  - 若無則呼叫 `Recipe.get_all()` 取得最新食譜清單。
-- **輸出**: 渲染 `recipes/index.html`，傳入食譜列表變數 `recipes`。
-- **錯誤處理**: 資料庫如讀取錯誤報 500。
+### `GET /settings` & `POST /settings/budget`
+- **輸入**: POST 時接收 `budget` 表單欄位。
+- **處理邏輯**: GET 時讀取現有預算；POST 時呼叫 `Setting.set_value()` 更新預算。
+- **輸出**: POST 成功後重導向回 `/settings`，並帶有 Flash 訊息。
 
-### `GET /recipes/new` (新增輸入頁面)
-- **輸入**: 無
-- **處理邏輯**: 準備畫面即可。
-- **輸出**: 渲染 `recipes/form.html`。
-- **錯誤處理**: 無特殊錯誤。
+### `GET /records` (紀錄列表)
+- **輸入**: URL 查詢參數如 `?year_month=2026-04&category_id=1`。
+- **處理邏輯**: 呼叫 `Record.get_all(filters)` 獲取過濾後的紀錄。
+- **輸出**: 渲染 `records/index.html`。
 
-### `POST /recipes` (建立食譜)
-- **輸入**: Form Data 包含 `title`, `description`, `ingredients`, `steps`。
-- **處理邏輯**: 接收 Form，呼叫 `Recipe.create(data)`。
-- **輸出**: Http 302 重新導向至 `/` (首頁)。
-- **錯誤處理**: 若 `title`, `ingredients`, `steps` 等必填欄位缺失，透過 Flash Message 提示並導回 `/recipes/new`。
+### `GET /records/new` & `POST /records`
+- **輸入**: POST 時接收 `amount`, `date`, `category_id`, `description`。
+- **處理邏輯**: GET 時提供分類清單 `Category.get_all()` 給下拉選單；POST 時呼叫 `Record.create()`，並檢查是否超過預算設定 Flash 訊息。
+- **輸出**: 成功重導向至 `/records`，若驗證失敗重新渲染 `records/form.html`。
 
-### `GET /recipes/<int:id>` (食譜明細)
+### `GET /records/<id>/edit` & `POST /records/<id>/update`
+- **輸入**: URL 參數 `id`；POST 時接收更新的表單欄位。
+- **處理邏輯**: 確認 `id` 存在，呼叫 `Record.update()`。
+- **輸出**: 成功重導向至 `/records`，404 若找不到該紀錄。
+
+### `POST /records/<id>/delete`
 - **輸入**: URL 參數 `id`。
-- **處理邏輯**: 呼叫 `Recipe.get_by_id(id)` 取得指定食譜。
-- **輸出**: 渲染 `recipes/show.html`，傳入 `recipe`。
-- **錯誤處理**: 若 `recipe` 為空 (None)，拋出 HTTP 404 (Not Found)。
+- **處理邏輯**: 呼叫 `Record.delete(id)`。
+- **輸出**: 刪除後重導向至 `/records`。
 
-### `GET /recipes/<int:id>/edit` (編輯食譜頁面)
-- **輸入**: URL 參數 `id`。
-- **處理邏輯**: 呼叫 `Recipe.get_by_id(id)` 取得指定食譜。
-- **輸出**: 渲染 `recipes/form.html`，傳入 `recipe` 將現有值帶入欄位。
-- **錯誤處理**: 若查無結果，拋出 404。
-
-### `POST /recipes/<int:id>/update` (更新食譜)
-- **輸入**: URL 參數 `id` 與被更新的表單資料。
-- **處理邏輯**: 呼叫 `Recipe.update(id, data)`。
-- **輸出**: 更新成功後重新導向回詳細頁面 `/recipes/<id>`。
-- **錯誤處理**: 查無食譜 (404) 或欄位缺失等驗證同建立食譜的處理方式。
-
-### `POST /recipes/<int:id>/delete` (刪除食譜)
-- **輸入**: URL 參數 `id`。
-- **處理邏輯**: 呼叫 `Recipe.delete(id)` 進行刪除。
-- **輸出**: 刪除成功後重新導向至 `/`。
-- **錯誤處理**: 若查無食譜則拋出 404。
-
----
+### `GET /analytics`
+- **輸入**: URL 查詢參數如 `?year_month=2026-04&type=expense`。
+- **處理邏輯**: 彙整特定月份的分類花費總和。
+- **輸出**: 渲染 `analytics/index.html` 並將資料傳給前端供圖表繪製。
 
 ## 3. Jinja2 模板清單
-
-以下檔案後續將於 `app/templates` 建立：
-1. `base.html`: 包含全站共用的 `<head>`、導覽列與外觀樣式。
-2. `recipes/index.html`: 繼承 `base.html`，以卡片或列表結構呈現食譜總覽。
-3. `recipes/show.html`: 繼承 `base.html`，全版詳細呈現食材清單與步驟說明。
-4. `recipes/form.html`: 繼承 `base.html`，一個頁面同時支援新增 (Create) 與編輯 (Update)。依據後端是否丟出已存在的 `recipe` 來判斷是 POST 到 `/recipes` 或 `/recipes/<id>/update`。
+以下是預計建立的模板檔案結構：
+- `base.html`：所有頁面共用的外層 HTML (包含 header, nav, footer, Flash 訊息顯示)。
+- `main/index.html`：繼承 `base.html`，顯示 Dashboard。
+- `main/settings.html`：繼承 `base.html`，顯示設定表單。
+- `records/index.html`：繼承 `base.html`，顯示明細表格與搜尋介面。
+- `records/form.html`：繼承 `base.html`，新增與編輯共用的表單介面。
+- `analytics/index.html`：繼承 `base.html`，顯示圖表區域。
